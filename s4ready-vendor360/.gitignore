@@ -5,3 +5,5 @@ coverage/
 .env.local
 .env.production
 *.log
+pnpm-lock.yaml
+pnpm-workspace.yaml

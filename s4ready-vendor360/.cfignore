@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+tests/
+*.test.ts
+.git/
+coverage/
+pnpm-workspace.yaml
+pnpm-lock.yaml
+src/

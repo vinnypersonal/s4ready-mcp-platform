@@ -4,7 +4,7 @@
  * adding a dependency.
  */
 
-import type { Cache } from '../interfaces/cache';
+import type { Cache } from '../../interfaces/cache';
 
 interface Entry {
   value: unknown;

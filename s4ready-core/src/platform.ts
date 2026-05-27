@@ -28,6 +28,7 @@ import { DirectSapConnector } from './adapters/standalone/direct-sap-connector';
 import { MockSapConnector } from './adapters/standalone/mock-sap-connector';
 import { AnthropicAiClient } from './adapters/standalone/anthropic-ai-client';
 import { InMemoryCache } from './adapters/standalone/in-memory-cache';
+import { InMemoryConfigStore } from './adapters/standalone/in-memory-config-store';
 
 // BTP adapters
 import { XsuaaAuthProvider } from './adapters/btp/xsuaa-auth';
@@ -155,54 +156,80 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
     }
   } else {
     // Standalone mode: read all settings from env vars.
-    auth = options.overrides?.auth ?? new JwtAuthProvider({
-      issuer: process.env.OIDC_ISSUER,
-      jwksUri: process.env.OIDC_JWKS_URI,
-      audience: process.env.OIDC_AUDIENCE,
-      secret: process.env.JWT_SECRET,
-      tenantClaim: process.env.JWT_TENANT_CLAIM ?? 'tenant_id'
-    });
+    // If VCAP_SERVICES has an XSUAA binding, use it for auth even in standalone mode.
+    const vcapStandalone = JSON.parse(process.env.VCAP_SERVICES ?? '{}');
+    const xsuaaBinding = vcapStandalone.xsuaa?.[0]?.credentials;
+    if (!options.overrides?.auth) {
+      if (xsuaaBinding) {
+        auth = XsuaaAuthProvider.fromVcapServices();
+      } else {
+        auth = new JwtAuthProvider({
+          issuer: process.env.OIDC_ISSUER,
+          jwksUri: process.env.OIDC_JWKS_URI,
+          audience: process.env.OIDC_AUDIENCE,
+          secret: process.env.JWT_SECRET,
+          tenantClaim: process.env.JWT_TENANT_CLAIM ?? 'tenant_id'
+        });
+      }
+    } else {
+      auth = options.overrides.auth;
+    }
+
+    const mockMode = process.env.SAP_MODE === 'mock';
 
     if (!options.overrides?.config) {
-      const pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        host: process.env.DB_HOST,
-        port: process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME
-      });
-      config = new PostgresConfigStore({ pg: pool, logger });
+      if (mockMode) {
+        config = new InMemoryConfigStore();
+      } else {
+        const pool = new Pool({
+          connectionString: process.env.DATABASE_URL,
+          host: process.env.DB_HOST,
+          port: process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined,
+          user: process.env.DB_USER,
+          password: process.env.DB_PASSWORD,
+          database: process.env.DB_NAME
+        });
+        config = new PostgresConfigStore({ pg: pool, logger });
+      }
     } else {
       config = options.overrides.config;
     }
 
     if (!options.overrides?.audit) {
-      const pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        host: process.env.DB_HOST,
-        port: process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME
-      });
-      audit = new PostgresAuditLog({ pg: pool, logger });
+      if (mockMode) {
+        audit = new LocalConsoleAuditLog(logger);
+      } else {
+        const pool = new Pool({
+          connectionString: process.env.DATABASE_URL,
+          host: process.env.DB_HOST,
+          port: process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined,
+          user: process.env.DB_USER,
+          password: process.env.DB_PASSWORD,
+          database: process.env.DB_NAME
+        });
+        audit = new PostgresAuditLog({ pg: pool, logger });
+      }
     } else {
       audit = options.overrides.audit;
     }
 
     if (!options.overrides?.ai) {
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        logger.warn('ANTHROPIC_API_KEY not set; AI features will be unavailable');
-        ai = new NullAiClient();
+      const aiCoreBinding = vcapStandalone.aicore?.[0]?.credentials;
+      if (aiCoreBinding) {
+        ai = new AiCoreClient({ credentials: aiCoreBinding, budget, logger });
       } else {
-        ai = new AnthropicAiClient({
-          apiKey,
-          defaultModel: process.env.AI_MODEL ?? 'claude-sonnet-4-6',
-          budget,
-          logger
-        });
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey) {
+          logger.warn('ANTHROPIC_API_KEY not set; AI features will be unavailable');
+          ai = new NullAiClient();
+        } else {
+          ai = new AnthropicAiClient({
+            apiKey,
+            defaultModel: process.env.AI_MODEL ?? 'claude-sonnet-4-6',
+            budget,
+            logger
+          });
+        }
       }
     } else {
       ai = options.overrides.ai;

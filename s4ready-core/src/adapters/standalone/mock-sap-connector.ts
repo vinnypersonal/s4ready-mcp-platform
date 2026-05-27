@@ -79,7 +79,13 @@ export class MockSapConnector implements SapConnector {
   }
 
   private evalFilter(item: Record<string, unknown>, expr: string): boolean {
-    // Handle compound AND first.
+    // Handle compound OR first (lower precedence than AND).
+    const orParts = this.splitOnOr(expr);
+    if (orParts.length > 1) {
+      return orParts.some(part => this.evalFilter(item, part));
+    }
+
+    // Handle compound AND.
     const andParts = this.splitOnAnd(expr);
     if (andParts.length > 1) {
       return andParts.every(part => this.evalFilter(item, part));
@@ -124,9 +130,11 @@ export class MockSapConnector implements SapConnector {
   }
 
   private splitOnAnd(expr: string): string[] {
-    // Naive split on " and " — doesn't handle parens correctly but is enough
-    // for the queries our tools generate.
     return expr.split(/\s+and\s+/i).map(s => s.trim());
+  }
+
+  private splitOnOr(expr: string): string[] {
+    return expr.split(/\s+or\s+/i).map(s => s.trim());
   }
 
   private applyOrderBy(
@@ -142,7 +150,7 @@ export class MockSapConnector implements SapConnector {
       if (av === bv) return 0;
       if (av === undefined) return 1;
       if (bv === undefined) return -1;
-      return av > bv ? dir : -dir;
+      return (av ?? '') > (bv ?? '') ? dir : -dir;
     });
   }
 
