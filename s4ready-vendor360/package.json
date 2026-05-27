@@ -1,0 +1,38 @@
+{
+  "name": "@s4ready/vendor360",
+  "version": "1.0.0",
+  "description": "Vendor & Customer 360 AI agent for SAP S/4HANA — part of s4ready.ai",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "nodemon --exec ts-node src/server.ts --ext ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist",
+    "build:all": "cd ../s4ready-core && pnpm build && cd ../s4ready-vendor360 && pnpm build"
+  },
+  "keywords": ["sap", "mcp", "joule", "vendor360", "s4hana", "procurement", "agent"],
+  "author": "s4ready.ai",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vineet8nus/s4ready-mcp-platform.git",
+    "directory": "s4ready-vendor360"
+  },
+  "dependencies": {
+    "@s4ready/core": "file:../s4ready-core",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "nodemon": "^3.1.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

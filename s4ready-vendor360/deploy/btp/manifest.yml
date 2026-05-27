@@ -1,0 +1,26 @@
+---
+applications:
+  - name: s4ready-vendor360
+    memory: 512M
+    disk_quota: 1G
+    instances: 2
+    buildpacks:
+      - nodejs_buildpack
+    command: node dist/server.js
+    health-check-type: http
+    health-check-http-endpoint: /health
+    timeout: 60
+    env:
+      NODE_ENV: production
+      DEPLOY_MODE: btp
+      SAP_MODE: btp
+      LOG_LEVEL: info
+      # DEFAULT_TENANT_ID is not set in BTP mode — tenant comes from JWT claims.
+    services:
+      - s4ready-vendor360-xsuaa
+      - s4ready-vendor360-hana
+      - s4ready-vendor360-aicore
+      - s4ready-vendor360-destination
+      - s4ready-vendor360-connectivity
+      - s4ready-vendor360-auditlog
+      - s4ready-vendor360-applogs

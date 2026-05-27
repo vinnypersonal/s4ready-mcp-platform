@@ -1,0 +1,76 @@
+_schema-version: "3.3"
+ID: s4ready-vendor360
+version: 1.0.0
+description: "s4ready.ai Vendor & Customer 360 — MCP Agent for SAP Joule"
+
+parameters:
+  enable-parallel-deployments: true
+
+modules:
+  - name: s4ready-vendor360-srv
+    type: nodejs
+    path: ../..
+    parameters:
+      memory: 512M
+      disk-quota: 1G
+      instances: 2
+    build-parameters:
+      builder: npm
+      build-result: .
+      ignore: [".env", "node_modules/", "tests/", "*.test.ts", "deploy/"]
+    requires:
+      - name: s4ready-vendor360-xsuaa
+      - name: s4ready-vendor360-hana
+      - name: s4ready-vendor360-aicore
+      - name: s4ready-vendor360-destination
+      - name: s4ready-vendor360-connectivity
+      - name: s4ready-vendor360-auditlog
+      - name: s4ready-vendor360-applogs
+    provides:
+      - name: s4ready-vendor360-api
+        properties:
+          url: ${default-url}
+
+resources:
+  - name: s4ready-vendor360-xsuaa
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+
+  - name: s4ready-vendor360-hana
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+
+  - name: s4ready-vendor360-aicore
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: aicore
+      service-plan: standard
+
+  - name: s4ready-vendor360-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+
+  - name: s4ready-vendor360-connectivity
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: connectivity
+      service-plan: lite
+
+  - name: s4ready-vendor360-auditlog
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: auditlog
+      service-plan: standard
+
+  - name: s4ready-vendor360-applogs
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: application-logs
+      service-plan: standard

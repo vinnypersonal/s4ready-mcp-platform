@@ -1,0 +1,98 @@
+version: "3.9"
+
+# s4ready Vendor 360 — Standalone deployment (Option 3)
+# Starts: vendor360 MCP server + PostgreSQL + optional Keycloak
+#
+# Usage:
+#   docker compose up -d             # start all
+#   docker compose logs -f vendor360  # watch logs
+#   docker compose down               # stop all
+#
+# First-time setup:
+#   1. Copy .env.example to .env
+#   2. Set ANTHROPIC_API_KEY in .env
+#   3. Set SAP_BASE_URL, SAP_USERNAME, SAP_PASSWORD (or leave SAP_MODE=mock for demo)
+#   4. docker compose up -d
+
+services:
+
+  # ── Vendor 360 MCP Server ───────────────────────────────────────────────
+  vendor360:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: s4ready-vendor360
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      DEPLOY_MODE: standalone
+      SAP_MODE: ${SAP_MODE:-mock}
+      SAP_BASE_URL: ${SAP_BASE_URL:-}
+      SAP_USERNAME: ${SAP_USERNAME:-}
+      SAP_PASSWORD: ${SAP_PASSWORD:-}
+      SAP_CLIENT: ${SAP_CLIENT:-100}
+      SAP_INSECURE_TLS: ${SAP_INSECURE_TLS:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-claude-sonnet-4-6}
+      DATABASE_URL: postgresql://s4ready:s4ready@postgres:5432/s4ready
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_TENANT_CLAIM: tenant_id
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-default}
+      SKIP_AUTH: ${SKIP_AUTH:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - s4ready
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: s4ready-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: s4ready
+      POSTGRES_PASSWORD: s4ready
+      POSTGRES_DB: s4ready
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../../db/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"   # expose for admin tools — remove in production
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U s4ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - s4ready
+
+  # ── Keycloak (optional — comment out if you handle auth externally) ──────
+  # keycloak:
+  #   image: quay.io/keycloak/keycloak:24.0
+  #   container_name: s4ready-keycloak
+  #   restart: unless-stopped
+  #   command: start-dev
+  #   environment:
+  #     KEYCLOAK_ADMIN: admin
+  #     KEYCLOAK_ADMIN_PASSWORD: admin
+  #   ports:
+  #     - "8180:8080"
+  #   networks:
+  #     - s4ready
+
+volumes:
+  postgres_data:
+
+networks:
+  s4ready:
+    driver: bridge

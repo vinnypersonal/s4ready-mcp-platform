@@ -1,0 +1,65 @@
+{
+  "xsappname": "s4ready-vendor360",
+  "tenant-mode": "shared",
+  "description": "s4ready.ai Vendor 360 MCP Agent",
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.user",
+      "description": "Basic user access to Vendor 360"
+    },
+    {
+      "name": "$XSAPPNAME.admin",
+      "description": "Admin access — view audit logs, manage tenant config"
+    },
+    {
+      "name": "$XSAPPNAME.procurement_manager",
+      "description": "Procurement manager — full vendor view including pricing"
+    },
+    {
+      "name": "$XSAPPNAME.sales_manager",
+      "description": "Sales manager — full customer view"
+    }
+  ],
+  "role-templates": [
+    {
+      "name": "Vendor360User",
+      "description": "Standard user of Vendor 360",
+      "scope-references": ["$XSAPPNAME.user"]
+    },
+    {
+      "name": "Vendor360Admin",
+      "description": "Admin of Vendor 360 — tenant management",
+      "scope-references": ["$XSAPPNAME.user", "$XSAPPNAME.admin"]
+    },
+    {
+      "name": "ProcurementManager",
+      "description": "Full procurement visibility",
+      "scope-references": ["$XSAPPNAME.user", "$XSAPPNAME.procurement_manager"]
+    },
+    {
+      "name": "SalesManager",
+      "description": "Full customer visibility",
+      "scope-references": ["$XSAPPNAME.user", "$XSAPPNAME.sales_manager"]
+    }
+  ],
+  "role-collections": [
+    {
+      "name": "S4Ready_Vendor360_User",
+      "description": "Vendor 360 — basic user",
+      "role-template-references": ["$XSAPPNAME.Vendor360User"]
+    },
+    {
+      "name": "S4Ready_Vendor360_Admin",
+      "description": "Vendor 360 — admin",
+      "role-template-references": ["$XSAPPNAME.Vendor360Admin"]
+    }
+  ],
+  "oauth2-configuration": {
+    "token-validity": 43200,
+    "redirect-uris": [
+      "https://*.cfapps.*.hana.ondemand.com/**",
+      "https://*.s4ready.ai/**",
+      "http://localhost:*/**"
+    ]
+  }
+}
