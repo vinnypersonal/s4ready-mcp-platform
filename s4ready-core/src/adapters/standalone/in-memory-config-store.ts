@@ -1,23 +1,25 @@
 import type { ConfigStore, TenantConfig } from '../../interfaces/config-store';
 
-const DEFAULT_TENANT: TenantConfig = {
-  tenant: {
-    id: 'default',
-    name: 'Dev Tenant',
-    subscription_tier: 'pro'
-  },
-  sap_systems: [
-    {
+function buildDefaultTenant(): TenantConfig {
+  return {
+    tenant: {
       id: 'default',
-      destination_name: 'S4H_MOCK',
-      type: 's4hana_cloud_public',
-      default: true
+      name: 'Dev Tenant',
+      subscription_tier: 'pro'
+    },
+    sap_systems: [
+      {
+        id: 'default',
+        destination_name: process.env.SAP_DESTINATION_NAME ?? 'S4H_DEFAULT',
+        type: 's4hana_cloud_public',
+        default: true
+      }
+    ],
+    tools: {
+      vendor360: { enabled: true }
     }
-  ],
-  tools: {
-    vendor360: { enabled: true }
-  }
-};
+  };
+}
 
 export class InMemoryConfigStore implements ConfigStore {
   private configs = new Map<string, TenantConfig>();
@@ -31,7 +33,8 @@ export class InMemoryConfigStore implements ConfigStore {
   }
 
   async getTenantConfig(tenantId: string): Promise<TenantConfig> {
-    const cfg = this.configs.get(tenantId) ?? { ...DEFAULT_TENANT, tenant: { ...DEFAULT_TENANT.tenant, id: tenantId } };
+    const def = buildDefaultTenant();
+    const cfg = this.configs.get(tenantId) ?? { ...def, tenant: { ...def.tenant, id: tenantId } };
     return cfg;
   }
 

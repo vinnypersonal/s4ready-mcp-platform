@@ -240,12 +240,14 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
     user: UserContext,
     tenantConfig: TenantConfig
   ): Promise<SapConnector> => {
-    // Mock mode short-circuits everything — used in dev and tests.
-    if (process.env.SAP_MODE === 'mock') {
+    const sapMode = process.env.SAP_MODE ?? 'mock';
+
+    if (sapMode === 'mock') {
       return new MockSapConnector();
     }
 
-    if (mode === 'btp') {
+    // btp mode: use Destination Service — works in both standalone and btp DEPLOY_MODE
+    if (sapMode === 'btp') {
       return new BtpSapConnector({
         tenantConfig,
         userToken: user.propagationToken,
