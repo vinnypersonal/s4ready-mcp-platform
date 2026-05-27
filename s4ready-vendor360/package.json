@@ -13,7 +13,15 @@
     "clean": "rm -rf dist",
     "build:all": "cd ../s4ready-core && pnpm build && cd ../s4ready-vendor360 && pnpm build"
   },
-  "keywords": ["sap", "mcp", "joule", "vendor360", "s4hana", "procurement", "agent"],
+  "keywords": [
+    "sap",
+    "mcp",
+    "joule",
+    "vendor360",
+    "s4hana",
+    "procurement",
+    "agent"
+  ],
   "author": "s4ready.ai",
   "license": "UNLICENSED",
   "repository": {
@@ -22,7 +30,8 @@
     "directory": "s4ready-vendor360"
   },
   "dependencies": {
-    "@s4ready/core": "file:../s4ready-core",
+    "@s4ready/core": "file:./vendor-packages/s4ready-core-1.0.0.tgz",
+    "dotenv": "^17.4.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {

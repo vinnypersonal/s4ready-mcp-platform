@@ -14,7 +14,7 @@
     "sourceMap": true,
     "moduleResolution": "node",
     "paths": {
-      "@s4ready/core": ["../s4ready-core/src/index.ts"]
+      "@s4ready/core": ["../s4ready-core/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*"],

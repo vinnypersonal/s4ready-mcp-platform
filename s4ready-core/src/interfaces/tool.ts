@@ -79,7 +79,7 @@ export interface ToolHandler<TInput = unknown, TOutput = unknown> {
   /** Description shown to the LLM. */
   description: string;
   /** Zod schema for input validation. */
-  inputSchema: z.ZodSchema<TInput>;
+  inputSchema: z.ZodType<TInput, any, any>;
   /** Handler function. */
   handler: (input: TInput, context: ToolContext) => Promise<TOutput>;
 }

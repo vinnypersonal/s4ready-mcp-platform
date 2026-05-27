@@ -5,3 +5,10 @@ coverage/
 .env.local
 .env.production
 *.log
+pnpm-lock.yaml
+pnpm-workspace.yaml
+*.tgz
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
