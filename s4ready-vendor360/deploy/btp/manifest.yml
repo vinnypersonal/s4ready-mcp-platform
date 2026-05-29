@@ -13,7 +13,8 @@ applications:
     env:
       NODE_ENV: production
       DEPLOY_MODE: standalone
-      SAP_MODE: mock
+      SAP_MODE: btp
+      SAP_DESTINATION_NAME: SHD250SYSTEM
       SKIP_AUTH: "true"
       LOG_LEVEL: info
       DEFAULT_TENANT_ID: default
