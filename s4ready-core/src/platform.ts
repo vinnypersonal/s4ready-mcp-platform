@@ -175,12 +175,12 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
       auth = options.overrides.auth;
     }
 
-    const mockMode = process.env.SAP_MODE === 'mock';
+    // Use Postgres only when a DB connection string is explicitly provided.
+    // SAP_MODE governs how we reach SAP — not whether a database exists.
+    const hasDatabase = !!(process.env.DATABASE_URL || process.env.DB_HOST);
 
     if (!options.overrides?.config) {
-      if (mockMode) {
-        config = new InMemoryConfigStore();
-      } else {
+      if (hasDatabase) {
         const pool = new Pool({
           connectionString: process.env.DATABASE_URL,
           host: process.env.DB_HOST,
@@ -190,15 +190,15 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
           database: process.env.DB_NAME
         });
         config = new PostgresConfigStore({ pg: pool, logger });
+      } else {
+        config = new InMemoryConfigStore();
       }
     } else {
       config = options.overrides.config;
     }
 
     if (!options.overrides?.audit) {
-      if (mockMode) {
-        audit = new LocalConsoleAuditLog(logger);
-      } else {
+      if (hasDatabase) {
         const pool = new Pool({
           connectionString: process.env.DATABASE_URL,
           host: process.env.DB_HOST,
@@ -208,6 +208,8 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
           database: process.env.DB_NAME
         });
         audit = new PostgresAuditLog({ pg: pool, logger });
+      } else {
+        audit = new LocalConsoleAuditLog(logger);
       }
     } else {
       audit = options.overrides.audit;
