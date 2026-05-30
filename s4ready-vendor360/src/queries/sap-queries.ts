@@ -13,12 +13,14 @@ import type { ODataQuery } from '@s4ready/core';
 export function buildSearchPartnerQuery(searchTerm: string, limit = 20): ODataQuery {
   // Try both substring search on name and exact match on ID.
   // OData V2 substringof; S/4 Cloud uses contains().
+  // Note: IsSupplier/IsCustomer are not selectable on all on-premise releases —
+  // use BusinessPartnerCategory (1=Person,2=Organization) instead.
   return {
     servicePath: '/sap/opu/odata/sap/API_BUSINESS_PARTNER',
     entitySet: 'A_BusinessPartner',
     params: {
       $filter: `substringof('${escapeSingleQuote(searchTerm)}',BusinessPartnerFullName) or BusinessPartner eq '${escapeSingleQuote(searchTerm)}'`,
-      $select: 'BusinessPartner,BusinessPartnerFullName,BusinessPartnerCategory,IsSupplier,IsCustomer,BusinessPartnerIsBlocked,Country,CityName,PaymentTerms,CreditLimit,Currency,LastChangeDate',
+      $select: 'BusinessPartner,BusinessPartnerFullName,BusinessPartnerCategory,BusinessPartnerGrouping,BusinessPartnerIsBlocked,Country,CityName,LastChangeDate',
       $top: String(limit),
       $orderby: 'BusinessPartnerFullName asc'
     }
@@ -31,7 +33,7 @@ export function buildGetPartnerQuery(partnerId: string): ODataQuery {
     entitySet: 'A_BusinessPartner',
     params: {
       $filter: `BusinessPartner eq '${escapeSingleQuote(partnerId)}'`,
-      $select: 'BusinessPartner,BusinessPartnerFullName,BusinessPartnerCategory,BusinessPartnerGrouping,IsSupplier,IsCustomer,BusinessPartnerIsBlocked,Country,Region,CityName,PostalCode,AddressID,PaymentTerms,CreditLimit,Currency,LastChangeDate',
+      $select: 'BusinessPartner,BusinessPartnerFullName,BusinessPartnerCategory,BusinessPartnerGrouping,BusinessPartnerIsBlocked,Country,Region,CityName,PostalCode,LastChangeDate',
       $top: '1'
     }
   };

@@ -41,24 +41,19 @@ export const searchBusinessPartnerHandler: ToolHandler<Input> = {
     const query = buildSearchPartnerQuery(input.query, input.limit ?? 10);
     const response = await ctx.sap.fetchOData(query);
 
-    let results = response.results as Record<string, unknown>[];
+    const results = response.results as Record<string, unknown>[];
 
-    // Filter by partnerType if not BOTH
-    if (input.partnerType === 'VENDOR') {
-      results = results.filter(r => r.IsSupplier === true || r.IsSupplier === 'true');
-    } else if (input.partnerType === 'CUSTOMER') {
-      results = results.filter(r => r.IsCustomer === true || r.IsCustomer === 'true');
-    }
-
+    // BusinessPartnerCategory: '1'=Person, '2'=Organization, '3'=Group
+    // We return all matches and tag each with their grouping so the LLM can
+    // reason about supplier vs. customer from context.
     const shaped = results.map(r => ({
       id: String(r.BusinessPartner ?? ''),
       name: String(r.BusinessPartnerFullName ?? ''),
-      type: r.IsSupplier && r.IsCustomer ? 'BOTH'
-        : r.IsSupplier ? 'VENDOR'
-        : 'CUSTOMER',
+      category: String(r.BusinessPartnerCategory ?? ''),
+      grouping: String(r.BusinessPartnerGrouping ?? ''),
       country: String(r.Country ?? ''),
       city: r.CityName ? String(r.CityName) : undefined,
-      isBlocked: Boolean(r.BusinessPartnerIsBlocked),
+      isBlocked: r.BusinessPartnerIsBlocked === true || r.BusinessPartnerIsBlocked === 'true',
       lastActivity: r.LastChangeDate ? String(r.LastChangeDate) : undefined
     }));
 
