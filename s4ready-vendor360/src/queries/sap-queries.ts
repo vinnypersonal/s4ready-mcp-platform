@@ -20,7 +20,7 @@ export function buildSearchPartnerQuery(searchTerm: string, limit = 20): ODataQu
     entitySet: 'A_BusinessPartner',
     params: {
       $filter: `substringof('${escapeSingleQuote(searchTerm)}',BusinessPartnerFullName) or BusinessPartner eq '${escapeSingleQuote(searchTerm)}'`,
-      $select: 'BusinessPartner,BusinessPartnerFullName,BusinessPartnerCategory,BusinessPartnerGrouping,BusinessPartnerIsBlocked,Country,CityName,LastChangeDate',
+      $select: 'BusinessPartner,BusinessPartnerFullName,BusinessPartnerCategory,BusinessPartnerGrouping,BusinessPartnerIsBlocked',
       $top: String(limit),
       $orderby: 'BusinessPartnerFullName asc'
     }
@@ -33,7 +33,7 @@ export function buildGetPartnerQuery(partnerId: string): ODataQuery {
     entitySet: 'A_BusinessPartner',
     params: {
       $filter: `BusinessPartner eq '${escapeSingleQuote(partnerId)}'`,
-      $select: 'BusinessPartner,BusinessPartnerFullName,BusinessPartnerCategory,BusinessPartnerGrouping,BusinessPartnerIsBlocked,Country,Region,CityName,PostalCode,LastChangeDate',
+      $select: 'BusinessPartner,BusinessPartnerFullName,BusinessPartnerCategory,BusinessPartnerGrouping,BusinessPartnerIsBlocked',
       $top: '1'
     }
   };

@@ -51,10 +51,7 @@ export const searchBusinessPartnerHandler: ToolHandler<Input> = {
       name: String(r.BusinessPartnerFullName ?? ''),
       category: String(r.BusinessPartnerCategory ?? ''),
       grouping: String(r.BusinessPartnerGrouping ?? ''),
-      country: String(r.Country ?? ''),
-      city: r.CityName ? String(r.CityName) : undefined,
-      isBlocked: r.BusinessPartnerIsBlocked === true || r.BusinessPartnerIsBlocked === 'true',
-      lastActivity: r.LastChangeDate ? String(r.LastChangeDate) : undefined
+      isBlocked: r.BusinessPartnerIsBlocked === true || r.BusinessPartnerIsBlocked === 'true'
     }));
 
     // Cache search results for 2 minutes — vendor names don't change often.
