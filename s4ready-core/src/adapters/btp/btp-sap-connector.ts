@@ -195,14 +195,17 @@ export class BtpSapConnector implements SapConnector {
       { headers }
     );
 
+    const cfg = response.data.destinationConfiguration ?? {};
     this.logger?.info('Destination resolved', {
       name: destinationName,
-      proxyType: response.data.destinationConfiguration?.ProxyType,
-      auth: response.data.destinationConfiguration?.Authentication,
-      url: response.data.destinationConfiguration?.URL,
+      proxyType: cfg.ProxyType,
+      auth: cfg.Authentication,
+      url: cfg.URL,
+      locationId: cfg.CloudConnectorLocationId ?? cfg['sap-locationid'] ?? '(none)',
       hasAuthTokens: !!response.data.authTokens?.length,
       authTokenErrors: response.data.authTokens?.filter((t: any) => t.error).map((t: any) => t.error),
-      httpHeaders: response.data.httpHeaders?.map((h: any) => h.key)
+      httpHeaderKeys: response.data.httpHeaders?.map((h: any) => h.key) ?? [],
+      allDestKeys: Object.keys(cfg)
     });
 
     return response.data;
@@ -307,6 +310,13 @@ export class BtpSapConnector implements SapConnector {
       }
 
       headers['Proxy-Authorization'] = proxyAuthValue;
+
+      // If the destination has a Cloud Connector location ID set, pass it so
+      // the Connectivity proxy routes to the correct SCC instance.
+      const locationId = dest.CloudConnectorLocationId ?? dest['sap-locationid'];
+      if (locationId) {
+        headers['SAP-Connectivity-SCC-Location_ID'] = String(locationId);
+      }
 
       const proxyHost = this.connCreds?.onpremise_proxy_host
         ?? 'connectivityproxy.internal.cf.ap11.hana.ondemand.com';
