@@ -94,8 +94,9 @@ export function buildSupplierInvoicesQuery(supplierId: string, limit = 50): ODat
     servicePath: '/sap/opu/odata/sap/API_SUPPLIERINVOICE_PROCESS_SRV',
     entitySet: 'A_SupplierInvoice',
     params: {
-      $filter: `Supplier eq '${escapeSingleQuote(supplierId)}'`,
-      $select: 'SupplierInvoice,Supplier,InvoicingParty,DocumentDate,PostingDate,DocumentCurrency,InvoiceGrossAmount,PaymentBlockingReason,IsBlocked,NetPaymentDays',
+      // On-premise API uses InvoicingParty (not Supplier) as the vendor field.
+      $filter: `InvoicingParty eq '${escapeSingleQuote(supplierId)}'`,
+      $select: 'SupplierInvoice,FiscalYear,CompanyCode,InvoicingParty,DocumentDate,PostingDate,DocumentCurrency,InvoiceGrossAmount,PaymentBlockingReason',
       $top: String(limit),
       $orderby: 'DocumentDate desc'
     }
@@ -107,8 +108,8 @@ export function buildBlockedInvoicesQuery(supplierId: string): ODataQuery {
     servicePath: '/sap/opu/odata/sap/API_SUPPLIERINVOICE_PROCESS_SRV',
     entitySet: 'A_SupplierInvoice',
     params: {
-      $filter: `Supplier eq '${escapeSingleQuote(supplierId)}' and IsBlocked eq true`,
-      $select: 'SupplierInvoice,Supplier,DocumentDate,DocumentCurrency,InvoiceGrossAmount,PaymentBlockingReason',
+      $filter: `InvoicingParty eq '${escapeSingleQuote(supplierId)}' and PaymentBlockingReason ne ''`,
+      $select: 'SupplierInvoice,FiscalYear,CompanyCode,InvoicingParty,DocumentDate,DocumentCurrency,InvoiceGrossAmount,PaymentBlockingReason',
       $top: '20',
       $orderby: 'DocumentDate desc'
     }
