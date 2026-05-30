@@ -5,8 +5,8 @@
  *   - Uses the destination's stored credentials (technical user mode), or
  *   - Performs principal propagation (forwards user's identity to SAP)
  *
- * For production deployments, prefer principal propagation so each user's
- * SAP authorizations are respected.
+ * For on-premise SAP systems (ProxyType=OnPremise), all requests are routed
+ * through the BTP Connectivity Service → Cloud Connector → SAP system.
  */
 
 import axios, { type AxiosInstance } from 'axios';
@@ -27,14 +27,30 @@ interface DestinationServiceCredentials {
   uri: string; // destination service base URI
 }
 
+interface ConnectivityCredentials {
+  clientid: string;
+  clientsecret: string;
+  token_service_url?: string;
+  url?: string;
+  onpremise_proxy_host: string;
+  onpremise_proxy_http_port?: string | number;
+  onpremise_proxy_port?: string | number;
+}
+
 interface ResolvedDestination {
   URL: string;
   User?: string;
   Password?: string;
   Authentication?: string;
-  authTokens?: Array<{ value: string; type: string }>;
-  // Additional properties exposed by destination definition
+  ProxyType?: string;
+  'sap-client'?: string;
   [key: string]: unknown;
+}
+
+interface DestinationServiceResponse {
+  destinationConfiguration: ResolvedDestination;
+  authTokens?: Array<{ value: string; type: string; error?: string }>;
+  httpHeaders?: Array<{ key: string; value: string }>;
 }
 
 export interface BtpSapConnectorOptions {
@@ -46,11 +62,13 @@ export interface BtpSapConnectorOptions {
 
 export class BtpSapConnector implements SapConnector {
   private readonly destCreds: DestinationServiceCredentials;
+  private readonly connCreds?: ConnectivityCredentials;
   private readonly tenantConfig: TenantConfig;
   private readonly defaultSystemId: string;
   private readonly userToken?: string;
   private readonly logger?: Logger;
-  private cachedAccessToken?: { token: string; expiresAt: number };
+  private cachedDestToken?: { token: string; expiresAt: number };
+  private cachedConnToken?: { token: string; expiresAt: number };
 
   constructor(options: BtpSapConnectorOptions) {
     this.tenantConfig = options.tenantConfig;
@@ -66,11 +84,15 @@ export class BtpSapConnector implements SapConnector {
     this.defaultSystemId = defaultSystem.id;
 
     const vcap = JSON.parse(process.env.VCAP_SERVICES ?? '{}');
-    const binding = vcap.destination?.[0]?.credentials;
-    if (!binding) {
+
+    const destBinding = vcap.destination?.[0]?.credentials;
+    if (!destBinding) {
       throw new Error('Destination service binding not found in VCAP_SERVICES');
     }
-    this.destCreds = binding;
+    this.destCreds = destBinding;
+
+    // Connectivity Service binding — required for on-premise (Cloud Connector) destinations.
+    this.connCreds = vcap.connectivity?.[0]?.credentials;
   }
 
   async getSystemInfo(systemId?: string): Promise<SapSystemInfo> {
@@ -83,8 +105,8 @@ export class BtpSapConnector implements SapConnector {
     systemId?: string
   ): Promise<ODataResponse<T>> {
     const sys = this.resolveSystem(systemId);
-    const dest = await this.resolveDestination(sys.destination_name);
-    const client = this.buildClient(dest);
+    const destResp = await this.resolveDestination(sys.destination_name);
+    const client = await this.buildClient(destResp);
 
     const start = Date.now();
     let url = `${query.servicePath}/${query.entitySet}`;
@@ -134,10 +156,8 @@ export class BtpSapConnector implements SapConnector {
     const sys = this.resolveSystem(systemId);
     const start = Date.now();
     try {
-      const dest = await this.resolveDestination(sys.destination_name);
-      // Just resolving the destination proves reachability of dest service;
-      // a real ping requires hitting the SAP system itself.
-      const client = this.buildClient(dest);
+      const destResp = await this.resolveDestination(sys.destination_name);
+      const client = await this.buildClient(destResp);
       await client.get('/sap/opu/odata/IWFND/CATALOGSERVICE;v=2', {
         params: { $format: 'json', $top: '1' }
       });
@@ -158,11 +178,9 @@ export class BtpSapConnector implements SapConnector {
     return sys;
   }
 
-  private async resolveDestination(destinationName: string): Promise<ResolvedDestination> {
+  private async resolveDestination(destinationName: string): Promise<DestinationServiceResponse> {
     const accessToken = await this.getDestinationServiceToken();
 
-    // If we have a user token and the destination supports principal propagation,
-    // pass it via X-user-token header.
     const headers: Record<string, string> = {
       Authorization: `Bearer ${accessToken}`
     };
@@ -170,18 +188,25 @@ export class BtpSapConnector implements SapConnector {
       headers['X-user-token'] = this.userToken;
     }
 
-    const response = await axios.get(
+    const response = await axios.get<DestinationServiceResponse>(
       `${this.destCreds.uri}/destination-configuration/v1/destinations/${destinationName}`,
       { headers }
     );
-    return response.data.destinationConfiguration ?? response.data;
+
+    this.logger?.info('Destination resolved', {
+      name: destinationName,
+      proxyType: response.data.destinationConfiguration?.ProxyType,
+      auth: response.data.destinationConfiguration?.Authentication,
+      hasAuthTokens: !!response.data.authTokens?.length
+    });
+
+    return response.data;
   }
 
   private async getDestinationServiceToken(): Promise<string> {
-    if (this.cachedAccessToken && this.cachedAccessToken.expiresAt > Date.now() + 30_000) {
-      return this.cachedAccessToken.token;
+    if (this.cachedDestToken && this.cachedDestToken.expiresAt > Date.now() + 30_000) {
+      return this.cachedDestToken.token;
     }
-
     const response = await axios.post(
       `${this.destCreds.url}/oauth/token`,
       new URLSearchParams({
@@ -191,33 +216,98 @@ export class BtpSapConnector implements SapConnector {
       }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );
-
-    this.cachedAccessToken = {
+    this.cachedDestToken = {
       token: response.data.access_token,
       expiresAt: Date.now() + (response.data.expires_in ?? 3600) * 1000
     };
-    return this.cachedAccessToken.token;
+    return this.cachedDestToken.token;
   }
 
-  private buildClient(dest: ResolvedDestination): AxiosInstance {
+  private async getConnectivityToken(): Promise<string> {
+    if (this.cachedConnToken && this.cachedConnToken.expiresAt > Date.now() + 30_000) {
+      return this.cachedConnToken.token;
+    }
+    if (!this.connCreds) {
+      throw new Error('Connectivity service not bound — required for on-premise destinations');
+    }
+    const tokenUrl = this.connCreds.token_service_url ?? this.connCreds.url;
+    if (!tokenUrl) {
+      throw new Error('Connectivity service binding missing token_service_url');
+    }
+    const response = await axios.post(
+      `${tokenUrl}/oauth/token`,
+      new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: this.connCreds.clientid,
+        client_secret: this.connCreds.clientsecret
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+    this.cachedConnToken = {
+      token: response.data.access_token,
+      expiresAt: Date.now() + (response.data.expires_in ?? 3600) * 1000
+    };
+    return this.cachedConnToken.token;
+  }
+
+  private async buildClient(destResp: DestinationServiceResponse): Promise<AxiosInstance> {
+    const dest = destResp.destinationConfiguration;
     const headers: Record<string, string> = {
       Accept: 'application/json'
     };
 
-    // Pass through SAP client header if present in destination properties.
     if (dest['sap-client']) {
       headers['sap-client'] = String(dest['sap-client']);
     }
 
-    if (dest.Authentication === 'BasicAuthentication' && dest.User && dest.Password) {
+    // Auth: prefer tokens returned by Destination Service (handles OAuth, PP, etc.)
+    const authTokens = destResp.authTokens?.filter(t => !t.error);
+    if (authTokens && authTokens.length > 0) {
+      const tok = authTokens[0];
+      headers.Authorization = `${tok.type} ${tok.value}`;
+    } else if (dest.Authentication === 'BasicAuthentication' && dest.User && dest.Password) {
       const encoded = Buffer.from(`${dest.User}:${dest.Password}`).toString('base64');
       headers.Authorization = `Basic ${encoded}`;
-    } else if (dest.authTokens && dest.authTokens.length > 0) {
-      // Principal propagation or OAuth — destination service returns a usable token.
-      const tok = dest.authTokens[0];
-      headers.Authorization = `${tok.type} ${tok.value}`;
     }
 
+    const isOnPremise = dest.ProxyType === 'OnPremise';
+
+    if (isOnPremise) {
+      // Route through BTP Connectivity Service → Cloud Connector → SAP
+      if (!this.connCreds) {
+        throw new Error(
+          'Connectivity service not bound. On-premise destinations require the ' +
+          'connectivity service to be bound (s4ready-vendor360-connectivity).'
+        );
+      }
+      const connToken = await this.getConnectivityToken();
+      headers['Proxy-Authorization'] = `Bearer ${connToken}`;
+
+      const proxyPort = Number(
+        this.connCreds.onpremise_proxy_http_port
+        ?? this.connCreds.onpremise_proxy_port
+        ?? 20003
+      );
+
+      this.logger?.info('Routing via Connectivity proxy', {
+        proxyHost: this.connCreds.onpremise_proxy_host,
+        proxyPort,
+        targetUrl: dest.URL
+      });
+
+      return axios.create({
+        baseURL: dest.URL,
+        timeout: 30_000,
+        headers,
+        proxy: {
+          protocol: 'http',
+          host: this.connCreds.onpremise_proxy_host,
+          port: proxyPort
+        }
+      });
+    }
+
+    // Cloud destination — direct call
     return axios.create({
       baseURL: dest.URL,
       timeout: 30_000,
