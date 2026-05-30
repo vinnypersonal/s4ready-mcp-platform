@@ -143,7 +143,9 @@ export class BtpSapConnector implements SapConnector {
         ?? err?.response?.data?.error?.message
         ?? err?.message;
       this.logger?.warn('OData call failed (BTP)', {
-        systemId: sys.id, url, status, sapMsg
+        systemId: sys.id, url, status, sapMsg,
+        responseBody: JSON.stringify(err?.response?.data ?? '').slice(0, 500),
+        responseHeaders: JSON.stringify(err?.response?.headers ?? '').slice(0, 300)
       });
       throw new SapConnectorError(
         `SAP OData call failed [${status ?? 'no-status'}]: ${sapMsg}`,
@@ -197,7 +199,10 @@ export class BtpSapConnector implements SapConnector {
       name: destinationName,
       proxyType: response.data.destinationConfiguration?.ProxyType,
       auth: response.data.destinationConfiguration?.Authentication,
-      hasAuthTokens: !!response.data.authTokens?.length
+      url: response.data.destinationConfiguration?.URL,
+      hasAuthTokens: !!response.data.authTokens?.length,
+      authTokenErrors: response.data.authTokens?.filter((t: any) => t.error).map((t: any) => t.error),
+      httpHeaders: response.data.httpHeaders?.map((h: any) => h.key)
     });
 
     return response.data;
@@ -273,26 +278,49 @@ export class BtpSapConnector implements SapConnector {
     const isOnPremise = dest.ProxyType === 'OnPremise';
 
     if (isOnPremise) {
-      // Route through BTP Connectivity Service → Cloud Connector → SAP
-      if (!this.connCreds) {
-        throw new Error(
-          'Connectivity service not bound. On-premise destinations require the ' +
-          'connectivity service to be bound (s4ready-vendor360-connectivity).'
-        );
-      }
-      const connToken = await this.getConnectivityToken();
-      headers['Proxy-Authorization'] = `Bearer ${connToken}`;
+      // Route through BTP Connectivity Service → Cloud Connector → SAP.
+      //
+      // The Destination Service response may include httpHeaders with a
+      // pre-generated Proxy-Authorization token. Use that when available —
+      // it avoids a separate token fetch and uses the right audience/scope.
+      // Fall back to fetching our own connectivity token when not provided.
+      const proxyAuthFromDest = destResp.httpHeaders?.find(
+        (h: any) => h.key?.toLowerCase() === 'proxy-authorization'
+      );
 
+      let proxyAuthValue: string;
+      let tokenSource: string;
+
+      if (proxyAuthFromDest) {
+        proxyAuthValue = proxyAuthFromDest.value;
+        tokenSource = 'destination-service';
+      } else {
+        if (!this.connCreds) {
+          throw new Error(
+            'Connectivity service not bound and Destination Service did not return ' +
+            'Proxy-Authorization. On-premise destinations require one of these.'
+          );
+        }
+        const connToken = await this.getConnectivityToken();
+        proxyAuthValue = `Bearer ${connToken}`;
+        tokenSource = 'connectivity-binding';
+      }
+
+      headers['Proxy-Authorization'] = proxyAuthValue;
+
+      const proxyHost = this.connCreds?.onpremise_proxy_host
+        ?? 'connectivityproxy.internal.cf.ap11.hana.ondemand.com';
       const proxyPort = Number(
-        this.connCreds.onpremise_proxy_http_port
-        ?? this.connCreds.onpremise_proxy_port
+        this.connCreds?.onpremise_proxy_http_port
+        ?? this.connCreds?.onpremise_proxy_port
         ?? 20003
       );
 
       this.logger?.info('Routing via Connectivity proxy', {
-        proxyHost: this.connCreds.onpremise_proxy_host,
+        proxyHost,
         proxyPort,
-        targetUrl: dest.URL
+        targetUrl: dest.URL,
+        tokenSource
       });
 
       return axios.create({
@@ -301,7 +329,7 @@ export class BtpSapConnector implements SapConnector {
         headers,
         proxy: {
           protocol: 'http',
-          host: this.connCreds.onpremise_proxy_host,
+          host: proxyHost,
           port: proxyPort
         }
       });
